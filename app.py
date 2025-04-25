@@ -86,6 +86,11 @@ def student_dashboard():
     quiz_list = quizzes_col.distinct("quiz_id")
     selected_quiz = st.selectbox("Select a Quiz", quiz_list)
 
+    # 🔁 Soft rerun if flagged
+    if st.session_state.get("go_to_next"):
+        del st.session_state["go_to_next"]
+        st.experimental_rerun()
+
     if "quiz_started" not in st.session_state:
         st.session_state.quiz_started = False
 
@@ -109,24 +114,22 @@ def student_dashboard():
             st.markdown(f"**Q{q_index + 1}: {q['question_text']}**")
 
             selected_option = st.radio("Options", q["options"], key=f"q_{q_index}", index=None)
+            next_button = st.empty()
+            timer_text = st.empty()
 
             # Initialize timer
             if f"start_time_{q_index}" not in st.session_state:
                 st.session_state[f"start_time_{q_index}"] = time.time()
 
             remaining = q["question_time"] - int(time.time() - st.session_state[f"start_time_{q_index}"])
-
             if remaining <= 0:
                 st.session_state.timer_expired = True
                 remaining = 0
 
             st.markdown(f"⏳ Time Remaining: **{remaining}** seconds")
+            next_clicked = next_button.button("Next", key=f"next_{q_index}")
 
-            next_clicked = st.button("Next", key=f"next_{q_index}")
-
-            # Move to next question if:
-            # 1. Timer expires OR
-            # 2. User clicks next
+            # Go to next if time up or clicked
             if st.session_state.timer_expired or next_clicked:
                 is_correct = False
                 if selected_option:
@@ -134,10 +137,10 @@ def student_dashboard():
                 if is_correct:
                     st.session_state.score += 1
 
-                # Reset timer and move to next
                 st.session_state.timer_expired = False
                 st.session_state.current_q += 1
-                st.experimental_rerun()
+                st.session_state.go_to_next = True
+                st.stop()
 
         else:
             responses_col.insert_one({
@@ -152,6 +155,7 @@ def student_dashboard():
             for rank, record in enumerate(leaderboard, 1):
                 st.write(f"{rank}. {record['username']} - {record['score']}")
             st.session_state.quiz_started = False
+            st.session_state.go_to_next = False
 
 
 # ------------------ CONDUCTOR DASHBOARD ------------------
