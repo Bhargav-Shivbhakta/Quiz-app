@@ -193,6 +193,16 @@ def conductor_dashboard():
 
     st.write("---")
     admin_reset_data()
+    st.write("---")
+    st.write("🗑️ **Delete a Quiz**")
+
+    quiz_list = quizzes_col.distinct("quiz_id", {"created_by": st.session_state["username"]})
+    delete_quiz_id = st.selectbox("Select Quiz to Delete", quiz_list, key="delete_quiz")
+
+    if st.button("Delete This Quiz"):
+        quizzes_col.delete_many({"quiz_id": delete_quiz_id})
+        responses_col.delete_many({"quiz_id": delete_quiz_id})
+        st.success(f"✅ Quiz '{delete_quiz_id}' and all associated responses deleted.")
 
 # ------------------ MAIN APP ------------------
 def main():
