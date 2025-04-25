@@ -68,6 +68,16 @@ def reset_password():
         else:
             st.error("User not found.")
 
+def admin_reset_data():
+    st.subheader("🚨 Admin: Delete All Data")
+    st.warning("⚠️ This will delete ALL users, quizzes, and responses.")
+    confirm = st.checkbox("Yes, I want to delete everything permanently.")
+    if confirm and st.button("Delete All"):
+        users_col.delete_many({})
+        quizzes_col.delete_many({})
+        responses_col.delete_many({})
+        st.success("✅ All data deleted successfully.")
+
 # ------------------ STUDENT DASHBOARD ------------------
 def student_dashboard():
     st.subheader(f"Welcome, {st.session_state['username']} (Student)")
@@ -164,6 +174,9 @@ def conductor_dashboard():
         st.write("#### Leaderboard:")
         for rank, record in enumerate(leaderboard, 1):
             st.write(f"{rank}. {record['username']} - {record['score']}")
+
+    st.write("---")
+    admin_reset_data()
 
 # ------------------ MAIN APP ------------------
 def main():
