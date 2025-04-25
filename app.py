@@ -183,11 +183,12 @@ def main():
     st.set_page_config(page_title="Quiz App", layout="centered")
     st.title("🧠 Quiz App")
 
+    # ✅ Fixed: Proper redirection after login
     if st.session_state.get("just_logged_in"):
         del st.session_state["just_logged_in"]
-        st.markdown('<meta http-equiv="refresh" content="0">', unsafe_allow_html=True)
-        st.stop()
+        st.experimental_rerun()
 
+    # 🔐 If user is not logged in
     if "username" not in st.session_state:
         menu = st.sidebar.radio("Menu", ["Login", "Register", "Reset Password"])
         if menu == "Login":
@@ -196,6 +197,8 @@ def main():
             register()
         elif menu == "Reset Password":
             reset_password()
+
+    # 👤 If logged in
     else:
         st.sidebar.success(f"Logged in as {st.session_state['username']}")
         sidebar_choice = st.sidebar.radio("Navigation", ["Dashboard", "Reset Password", "Logout"])
