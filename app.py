@@ -2,6 +2,7 @@ import streamlit as st
 from db import users_col, quizzes_col, responses_col
 import pandas as pd
 import hashlib
+import time
 
 # ------------------ UTILS ------------------
 def hash_password(password):
@@ -73,36 +74,59 @@ def student_dashboard():
     quiz_list = quizzes_col.distinct("quiz_id")
     selected_quiz = st.selectbox("Select a Quiz", quiz_list)
 
-    if selected_quiz:
-        questions = list(quizzes_col.find({"quiz_id": selected_quiz}))
-        user_responses = []
-        score = 0
+    if "quiz_started" not in st.session_state:
+        st.session_state.quiz_started = False
 
-        for i, q in enumerate(questions):
-            st.markdown(f"**Q{i+1}: {q['question_text']}**")
-            selected = st.radio("Options", q["options"], key=str(q["_id"]), index=None)
-            correct = q["correct_option"]
-            is_correct = check_answer(correct, q["options"].index(selected)) if selected else False
-            user_responses.append({
-                "question_id": q["_id"],
-                "selected_option": selected,
-                "correct": is_correct
-            })
+    if selected_quiz and not st.session_state.quiz_started:
+        if st.button("Start Quiz"):
+            questions = list(quizzes_col.find({"quiz_id": selected_quiz}))
+            st.session_state.quiz_data = questions
+            st.session_state.quiz_id = selected_quiz
+            st.session_state.current_q = 0
+            st.session_state.score = 0
+            st.session_state.quiz_started = True
+            st.experimental_rerun()
+
+    if st.session_state.quiz_started:
+        questions = st.session_state.quiz_data
+        q_index = st.session_state.current_q
+
+        if q_index < len(questions):
+            q = questions[q_index]
+            st.markdown(f"**Q{q_index + 1}: {q['question_text']}**")
+
+            selected_option = st.radio("Options", q["options"], key=f"q_{q_index}", index=None)
+            next_button = st.empty()
+            timer_text = st.empty()
+
+            for i in range(q["question_time"], 0, -1):
+                timer_text.markdown(f"⏳ Time remaining: **{i}** seconds")
+                time.sleep(1)
+
+            timer_text.markdown("⏳ Time's up!")
+
+            is_correct = False
+            if selected_option:
+                is_correct = q["correct_option"] == q["options"].index(selected_option)
             if is_correct:
-                score += 1
+                st.session_state.score += 1
 
-        if st.button("Submit Quiz"):
+            next_button.button("Next Question")
+            st.session_state.current_q += 1
+            st.experimental_rerun()
+        else:
             responses_col.insert_one({
-                "quiz_id": selected_quiz,
+                "quiz_id": st.session_state.quiz_id,
                 "username": st.session_state["username"],
-                "score": score,
-                "responses": user_responses
+                "score": st.session_state.score,
+                "responses": []
             })
-            st.success(f"Quiz submitted! Your score: {score}")
+            st.success(f"Quiz completed! Your score: {st.session_state.score}")
+            leaderboard = get_leaderboard(st.session_state.quiz_id)
             st.subheader("Leaderboard:")
-            leaderboard = get_leaderboard(selected_quiz)
             for rank, record in enumerate(leaderboard, 1):
                 st.write(f"{rank}. {record['username']} - {record['score']}")
+            st.session_state.quiz_started = False
 
 # ------------------ CONDUCTOR DASHBOARD ------------------
 def conductor_dashboard():
@@ -111,6 +135,7 @@ def conductor_dashboard():
 
     uploaded_file = st.file_uploader("Upload CSV File with Questions", type="csv")
     quiz_id = st.text_input("Enter Quiz ID for This Upload")
+    time_limit = st.number_input("Set time per question (in seconds)", min_value=5, max_value=300, value=30)
 
     if uploaded_file and quiz_id:
         df = pd.read_csv(uploaded_file)
@@ -125,12 +150,14 @@ def conductor_dashboard():
                     "quiz_id": quiz_id,
                     "question_text": row["question_text"],
                     "options": [row["option1"], row["option2"], row["option3"], row["option4"]],
-                    "correct_option": int(row["correct_option"]) - 1
+                    "correct_option": int(row["correct_option"]) - 1,
+                    "question_time": time_limit,
+                    "created_by": st.session_state["username"]
                 })
-            st.success(f"{num_qs} questions uploaded successfully!")
+            st.success(f"{num_qs} questions uploaded successfully with {time_limit} sec/question.")
 
     st.write("### View Leaderboard")
-    quiz_list = quizzes_col.distinct("quiz_id")
+    quiz_list = quizzes_col.distinct("quiz_id", {"created_by": st.session_state["username"]})
     selected_quiz = st.selectbox("Select Quiz to View Leaderboard", quiz_list)
     if selected_quiz:
         leaderboard = get_leaderboard(selected_quiz)
@@ -145,7 +172,7 @@ def main():
 
     if st.session_state.get("just_logged_in"):
         del st.session_state["just_logged_in"]
-        st.write("Welcome! Please reload the page if you don’t see your dashboard.")
+        st.markdown('<meta http-equiv="refresh" content="0">', unsafe_allow_html=True)
         st.stop()
 
     if "username" not in st.session_state:
