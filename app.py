@@ -36,6 +36,7 @@ def login():
     st.subheader("Login")
     username = st.text_input("Username")
     password = st.text_input("Password", type="password")
+
     if st.button("Login"):
         user = users_col.find_one({
             "username": username,
@@ -44,6 +45,7 @@ def login():
         if user:
             st.session_state["username"] = user["username"]
             st.session_state["role"] = user["role"]
+            st.session_state["just_logged_in"] = True  # flag to avoid loop
             st.success(f"Logged in as {user['role']}")
             st.experimental_rerun()
         else:
@@ -119,6 +121,9 @@ def main():
     st.set_page_config(page_title="Quiz App", layout="centered")
     st.title("🧠 Quiz App")
 
+    if st.session_state.get("just_logged_in"):
+        del st.session_state["just_logged_in"]
+
     if "username" not in st.session_state:
         menu = st.sidebar.radio("Menu", ["Login", "Register"])
         if menu == "Login":
@@ -138,4 +143,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-# Streamlit app main file placeholder
