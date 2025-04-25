@@ -1,8 +1,8 @@
+
 import streamlit as st
 from db import users_col, quizzes_col, responses_col
 import pandas as pd
 import hashlib
-import time
 
 # ------------------ UTILS ------------------
 def hash_password(password):
@@ -68,17 +68,12 @@ def reset_password():
         else:
             st.error("User not found.")
 
-def admin_reset_data():
-    st.subheader("🚨 Admin: Delete All Data")
-    st.warning("⚠️ This will delete ALL users, quizzes, and responses.")
-    confirm = st.checkbox("Yes, I want to delete everything permanently.")
-    if confirm and st.button("Delete All"):
-        users_col.delete_many({})
-        quizzes_col.delete_many({})
-        responses_col.delete_many({})
-        st.success("✅ All data deleted successfully.")
-
 # ------------------ STUDENT DASHBOARD ------------------
+
+
+
+
+
 def student_dashboard():
     import time
 
@@ -86,10 +81,15 @@ def student_dashboard():
     quiz_list = quizzes_col.distinct("quiz_id")
     selected_quiz = st.selectbox("Select a Quiz", quiz_list)
 
-    # 🔁 Soft rerun if flagged
     if st.session_state.get("go_to_next"):
         del st.session_state["go_to_next"]
-        st.experimental_rerun()
+        st.markdown('<meta http-equiv="refresh" content="0">', unsafe_allow_html=True)
+        st.stop()
+
+    if st.session_state.get("start_quiz_now"):
+        del st.session_state["start_quiz_now"]
+        st.markdown('<meta http-equiv="refresh" content="0">', unsafe_allow_html=True)
+        st.stop()
 
     if "quiz_started" not in st.session_state:
         st.session_state.quiz_started = False
@@ -103,7 +103,8 @@ def student_dashboard():
             st.session_state.score = 0
             st.session_state.timer_expired = False
             st.session_state.quiz_started = True
-            st.experimental_rerun()
+            st.session_state.start_quiz_now = True
+            st.stop()
 
     if st.session_state.quiz_started:
         questions = st.session_state.quiz_data
@@ -117,19 +118,23 @@ def student_dashboard():
             next_button = st.empty()
             timer_text = st.empty()
 
-            # Initialize timer
-            if f"start_time_{q_index}" not in st.session_state:
-                st.session_state[f"start_time_{q_index}"] = time.time()
+            # Decoupled timer logic
+            timer_key = f"timer_{q_index}"
+            start_key = f"start_time_{q_index}"
+            if start_key not in st.session_state:
+                st.session_state[start_key] = time.time()
 
-            remaining = q["question_time"] - int(time.time() - st.session_state[f"start_time_{q_index}"])
-            if remaining <= 0:
+            elapsed = int(time.time() - st.session_state[start_key])
+            remaining = q["question_time"] - elapsed
+
+            if remaining > 0:
+                timer_text.markdown(f"⏳ Time Remaining: **{remaining}** seconds")
+            else:
+                timer_text.markdown("⏱ Time's up!")
                 st.session_state.timer_expired = True
-                remaining = 0
 
-            st.markdown(f"⏳ Time Remaining: **{remaining}** seconds")
             next_clicked = next_button.button("Next", key=f"next_{q_index}")
 
-            # Go to next if time up or clicked
             if st.session_state.timer_expired or next_clicked:
                 is_correct = False
                 if selected_option:
@@ -141,7 +146,6 @@ def student_dashboard():
                 st.session_state.current_q += 1
                 st.session_state.go_to_next = True
                 st.stop()
-
         else:
             responses_col.insert_one({
                 "quiz_id": st.session_state.quiz_id,
@@ -156,9 +160,6 @@ def student_dashboard():
                 st.write(f"{rank}. {record['username']} - {record['score']}")
             st.session_state.quiz_started = False
             st.session_state.go_to_next = False
-
-
-# ------------------ CONDUCTOR DASHBOARD ------------------
 def conductor_dashboard():
     st.subheader(f"Welcome, {st.session_state['username']} (Conductor)")
     st.write("### Upload Quiz Questions")
@@ -186,17 +187,7 @@ def conductor_dashboard():
                 })
             st.success(f"{num_qs} questions uploaded successfully with {time_limit} sec/question.")
 
-    st.write("### View Leaderboard")
-    quiz_list = quizzes_col.distinct("quiz_id", {"created_by": st.session_state["username"]})
-    selected_quiz = st.selectbox("Select Quiz to View Leaderboard", quiz_list)
-    if selected_quiz:
-        leaderboard = get_leaderboard(selected_quiz)
-        st.write("#### Leaderboard:")
-        for rank, record in enumerate(leaderboard, 1):
-            st.write(f"{rank}. {record['username']} - {record['score']}")
-
-    st.write("---")
-    admin_reset_data()
+    
     st.write("---")
     st.write("🗑️ **Delete a Quiz**")
 
@@ -208,17 +199,34 @@ def conductor_dashboard():
         responses_col.delete_many({"quiz_id": delete_quiz_id})
         st.success(f"✅ Quiz '{delete_quiz_id}' and all associated responses deleted.")
 
-# ------------------ MAIN APP ------------------
+    admin_reset_data()
+    st.write("### View Leaderboard")
+    quiz_list = quizzes_col.distinct("quiz_id", {"created_by": st.session_state["username"]})
+    selected_quiz = st.selectbox("Select Quiz to View Leaderboard", quiz_list)
+    if selected_quiz:
+        leaderboard = get_leaderboard(selected_quiz)
+        st.write("#### Leaderboard:")
+        for rank, record in enumerate(leaderboard, 1):
+            st.write(f"{rank}. {record['username']} - {record['score']}")
+
+def admin_reset_data():
+    st.warning("⚠️ This will delete ALL users, quizzes, and responses from the system.")
+    confirm = st.checkbox("Yes, I want to delete everything permanently.")
+    if confirm and st.button("Delete All Data"):
+        users_col.delete_many({})
+        quizzes_col.delete_many({})
+        responses_col.delete_many({})
+        st.success("✅ All data wiped. The system is now fresh.")
+
+
 def main():
     st.set_page_config(page_title="Quiz App", layout="centered")
     st.title("🧠 Quiz App")
 
-    # ✅ Fixed: Proper redirection after login
     if st.session_state.get("just_logged_in"):
         del st.session_state["just_logged_in"]
         st.experimental_rerun()
 
-    # 🔐 If user is not logged in
     if "username" not in st.session_state:
         menu = st.sidebar.radio("Menu", ["Login", "Register", "Reset Password"])
         if menu == "Login":
@@ -227,8 +235,6 @@ def main():
             register()
         elif menu == "Reset Password":
             reset_password()
-
-    # 👤 If logged in
     else:
         st.sidebar.success(f"Logged in as {st.session_state['username']}")
         sidebar_choice = st.sidebar.radio("Navigation", ["Dashboard", "Reset Password", "Logout"])
@@ -243,8 +249,10 @@ def main():
             reset_password()
 
         elif sidebar_choice == "Logout":
-            st.session_state.clear()
-            st.experimental_rerun()
+            for key in list(st.session_state.keys()):
+                del st.session_state[key]
+            st.markdown('<meta http-equiv="refresh" content="0">', unsafe_allow_html=True)
+            st.stop()
 
 if __name__ == "__main__":
     main()
