@@ -51,6 +51,22 @@ def login():
         else:
             st.error("Invalid credentials")
 
+def reset_password():
+    st.subheader("Reset Password")
+    username = st.text_input("Enter your username")
+    new_password = st.text_input("Enter new password", type="password")
+
+    if st.button("Update Password"):
+        user = users_col.find_one({"username": username})
+        if user:
+            users_col.update_one(
+                {"username": username},
+                {"$set": {"password": hash_password(new_password)}}
+            )
+            st.success("Password updated successfully.")
+        else:
+            st.error("User not found.")
+
 # ------------------ STUDENT DASHBOARD ------------------
 def student_dashboard():
     st.subheader(f"Welcome, {st.session_state['username']} (Student)")
@@ -103,7 +119,7 @@ def conductor_dashboard():
                                  min_value=1, max_value=total_qs, value=total_qs)
 
         if st.button("Upload Quiz"):
-            df = df.sample(num_qs).reset_index(drop=True)  # Random selection
+            df = df.sample(num_qs).reset_index(drop=True)
             for _, row in df.iterrows():
                 quizzes_col.insert_one({
                     "quiz_id": quiz_id,
@@ -129,23 +145,31 @@ def main():
 
     if st.session_state.get("just_logged_in"):
         del st.session_state["just_logged_in"]
-        st.experimental_rerun()
-        return
+        st.write("Welcome! Please reload the page if you don’t see your dashboard.")
+        st.stop()
 
     if "username" not in st.session_state:
-        menu = st.sidebar.radio("Menu", ["Login", "Register"])
+        menu = st.sidebar.radio("Menu", ["Login", "Register", "Reset Password"])
         if menu == "Login":
             login()
-        else:
+        elif menu == "Register":
             register()
+        elif menu == "Reset Password":
+            reset_password()
     else:
-        role = st.session_state["role"]
-        if role == "student":
-            student_dashboard()
-        elif role == "conductor":
-            conductor_dashboard()
+        st.sidebar.success(f"Logged in as {st.session_state['username']}")
+        sidebar_choice = st.sidebar.radio("Navigation", ["Dashboard", "Reset Password", "Logout"])
 
-        if st.sidebar.button("Logout"):
+        if sidebar_choice == "Dashboard":
+            if st.session_state["role"] == "student":
+                student_dashboard()
+            elif st.session_state["role"] == "conductor":
+                conductor_dashboard()
+
+        elif sidebar_choice == "Reset Password":
+            reset_password()
+
+        elif sidebar_choice == "Logout":
             st.session_state.clear()
             st.experimental_rerun()
 
