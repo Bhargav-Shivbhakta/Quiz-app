@@ -47,7 +47,7 @@ def login():
             st.session_state["role"] = user["role"]
             st.session_state["just_logged_in"] = True
             st.success(f"Logged in as {user['role']}")
-            st.stop()  # stop execution to avoid re-running login logic
+            st.stop()
         else:
             st.error("Invalid credentials")
 
@@ -62,11 +62,11 @@ def student_dashboard():
         user_responses = []
         score = 0
 
-        for q in questions:
-            st.markdown(f"**Q: {q['question_text']}**")
-            selected = st.radio("Options", q["options"], key=str(q["_id"]))
+        for i, q in enumerate(questions):
+            st.markdown(f"**Q{i+1}: {q['question_text']}**")
+            selected = st.radio("Options", q["options"], key=str(q["_id"]), index=None)
             correct = q["correct_option"]
-            is_correct = check_answer(correct, q["options"].index(selected))
+            is_correct = check_answer(correct, q["options"].index(selected)) if selected else False
             user_responses.append({
                 "question_id": q["_id"],
                 "selected_option": selected,
@@ -98,14 +98,20 @@ def conductor_dashboard():
 
     if uploaded_file and quiz_id:
         df = pd.read_csv(uploaded_file)
-        for _, row in df.iterrows():
-            quizzes_col.insert_one({
-                "quiz_id": quiz_id,
-                "question_text": row["question_text"],
-                "options": [row["option1"], row["option2"], row["option3"], row["option4"]],
-                "correct_option": int(row["correct_option"]) - 1
-            })
-        st.success("Questions uploaded successfully!")
+        total_qs = len(df)
+        num_qs = st.number_input(f"How many questions do you want in this quiz? (max {total_qs})",
+                                 min_value=1, max_value=total_qs, value=total_qs)
+
+        if st.button("Upload Quiz"):
+            df = df.sample(num_qs).reset_index(drop=True)  # Random selection
+            for _, row in df.iterrows():
+                quizzes_col.insert_one({
+                    "quiz_id": quiz_id,
+                    "question_text": row["question_text"],
+                    "options": [row["option1"], row["option2"], row["option3"], row["option4"]],
+                    "correct_option": int(row["correct_option"]) - 1
+                })
+            st.success(f"{num_qs} questions uploaded successfully!")
 
     st.write("### View Leaderboard")
     quiz_list = quizzes_col.distinct("quiz_id")
