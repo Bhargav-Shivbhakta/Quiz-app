@@ -80,6 +80,8 @@ def admin_reset_data():
 
 # ------------------ STUDENT DASHBOARD ------------------
 def student_dashboard():
+    import time
+
     st.subheader(f"Welcome, {st.session_state['username']} (Student)")
     quiz_list = quizzes_col.distinct("quiz_id")
     selected_quiz = st.selectbox("Select a Quiz", quiz_list)
@@ -94,6 +96,7 @@ def student_dashboard():
             st.session_state.quiz_id = selected_quiz
             st.session_state.current_q = 0
             st.session_state.score = 0
+            st.session_state.timer_expired = False
             st.session_state.quiz_started = True
             st.experimental_rerun()
 
@@ -106,24 +109,36 @@ def student_dashboard():
             st.markdown(f"**Q{q_index + 1}: {q['question_text']}**")
 
             selected_option = st.radio("Options", q["options"], key=f"q_{q_index}", index=None)
-            next_button = st.empty()
-            timer_text = st.empty()
 
-            for i in range(q["question_time"], 0, -1):
-                timer_text.markdown(f"⏳ Time remaining: **{i}** seconds")
-                time.sleep(1)
+            # Initialize timer
+            if f"start_time_{q_index}" not in st.session_state:
+                st.session_state[f"start_time_{q_index}"] = time.time()
 
-            timer_text.markdown("⏳ Time's up!")
+            remaining = q["question_time"] - int(time.time() - st.session_state[f"start_time_{q_index}"])
 
-            is_correct = False
-            if selected_option:
-                is_correct = q["correct_option"] == q["options"].index(selected_option)
-            if is_correct:
-                st.session_state.score += 1
+            if remaining <= 0:
+                st.session_state.timer_expired = True
+                remaining = 0
 
-            next_button.button("Next Question")
-            st.session_state.current_q += 1
-            st.experimental_rerun()
+            st.markdown(f"⏳ Time Remaining: **{remaining}** seconds")
+
+            next_clicked = st.button("Next", key=f"next_{q_index}")
+
+            # Move to next question if:
+            # 1. Timer expires OR
+            # 2. User clicks next
+            if st.session_state.timer_expired or next_clicked:
+                is_correct = False
+                if selected_option:
+                    is_correct = q["correct_option"] == q["options"].index(selected_option)
+                if is_correct:
+                    st.session_state.score += 1
+
+                # Reset timer and move to next
+                st.session_state.timer_expired = False
+                st.session_state.current_q += 1
+                st.experimental_rerun()
+
         else:
             responses_col.insert_one({
                 "quiz_id": st.session_state.quiz_id,
@@ -137,6 +152,7 @@ def student_dashboard():
             for rank, record in enumerate(leaderboard, 1):
                 st.write(f"{rank}. {record['username']} - {record['score']}")
             st.session_state.quiz_started = False
+
 
 # ------------------ CONDUCTOR DASHBOARD ------------------
 def conductor_dashboard():
