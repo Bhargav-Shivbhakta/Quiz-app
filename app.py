@@ -45,9 +45,9 @@ def login():
         if user:
             st.session_state["username"] = user["username"]
             st.session_state["role"] = user["role"]
-            st.session_state["just_logged_in"] = True  # flag to avoid loop
+            st.session_state["just_logged_in"] = True
             st.success(f"Logged in as {user['role']}")
-            st.experimental_rerun()
+            st.stop()  # stop execution to avoid re-running login logic
         else:
             st.error("Invalid credentials")
 
@@ -64,7 +64,7 @@ def student_dashboard():
 
         for q in questions:
             st.markdown(f"**Q: {q['question_text']}**")
-            selected = st.radio("Options", q["options"], key=q["_id"])
+            selected = st.radio("Options", q["options"], key=str(q["_id"]))
             correct = q["correct_option"]
             is_correct = check_answer(correct, q["options"].index(selected))
             user_responses.append({
@@ -123,6 +123,8 @@ def main():
 
     if st.session_state.get("just_logged_in"):
         del st.session_state["just_logged_in"]
+        st.experimental_rerun()
+        return
 
     if "username" not in st.session_state:
         menu = st.sidebar.radio("Menu", ["Login", "Register"])
