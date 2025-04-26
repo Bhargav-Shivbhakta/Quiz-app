@@ -84,21 +84,12 @@ def student_dashboard():
 
     quiz_list = quizzes_col.distinct("quiz_id")
 
-    # Keep previously selected quiz
+    # Keep previously selected quiz safely
     selected_quiz = st.selectbox(
         "Select a Quiz",
         quiz_list,
         index=quiz_list.index(st.session_state.get("selected_quiz_name", quiz_list[0])) if "selected_quiz_name" in st.session_state else 0
     )
-
-    # Soft rerun after move
-    if st.session_state.get("move_to_next"):
-        del st.session_state["move_to_next"]
-        st.experimental_rerun()
-
-    if st.session_state.get("start_quiz_now"):
-        del st.session_state["start_quiz_now"]
-        st.experimental_rerun()
 
     if "quiz_started" not in st.session_state:
         st.session_state.quiz_started = False
@@ -111,9 +102,8 @@ def student_dashboard():
             st.session_state.selected_quiz_name = selected_quiz
             st.session_state.current_q = 0
             st.session_state.score = 0
-            st.session_state.timer_expired = False
+            st.session_state.start_time = time.time()
             st.session_state.quiz_started = True
-            st.session_state.start_quiz_now = True
             st.experimental_rerun()
 
     if st.session_state.quiz_started:
@@ -126,42 +116,51 @@ def student_dashboard():
 
             selected_option = st.radio("Options", q["options"], key=f"q_{q_index}", index=None)
             next_button = st.empty()
-            timer_text = st.empty()
+            timer_placeholder = st.empty()
 
-            # Timer Management
-            timer_key = f"timer_{q_index}"
-            start_key = f"start_time_{q_index}"
-            if start_key not in st.session_state:
-                st.session_state[start_key] = time.time()
+            # Initialize question timer
+            if f"start_time_{q_index}" not in st.session_state:
+                st.session_state[f"start_time_{q_index}"] = time.time()
 
-            elapsed = int(time.time() - st.session_state[start_key])
+            elapsed = int(time.time() - st.session_state[f"start_time_{q_index}"])
             remaining = q["question_time"] - elapsed
 
+            # Live countdown
             if remaining > 0:
-                timer_text.markdown(f"⏳ Time Remaining: **{remaining}** seconds")
-                time.sleep(1)  # ✅ Wait 1 second
-                st.experimental_rerun()  # ✅ Soft rerun for live countdown
+                timer_placeholder.markdown(f"⏳ Time Remaining: **{remaining}** seconds")
+                next_clicked = next_button.button("Next", key=f"next_{q_index}")
+                time.sleep(1)
+                st.experimental_rerun()
             else:
-                timer_text.markdown("⏱ Time's up!")
-                st.session_state.timer_expired = True
-                st.session_state.move_to_next = True
-                st.stop()
-
-            next_clicked = next_button.button("Next", key=f"next_{q_index}")
-
-            if next_clicked:
+                # Time's up -> move automatically
+                timer_placeholder.markdown("⏱ Time's up!")
                 is_correct = False
                 if selected_option:
                     is_correct = q["correct_option"] == q["options"].index(selected_option)
                 if is_correct:
                     st.session_state.score += 1
 
-                st.session_state.timer_expired = False
                 st.session_state.current_q += 1
-                st.session_state.move_to_next = True
-                st.stop()
+                st.experimental_rerun()
+
+            # Manual Next click
+            if st.session_state.get(f"manual_next_{q_index}"):
+                is_correct = False
+                if selected_option:
+                    is_correct = q["correct_option"] == q["options"].index(selected_option)
+                if is_correct:
+                    st.session_state.score += 1
+
+                st.session_state.current_q += 1
+                del st.session_state[f"manual_next_{q_index}"]
+                st.experimental_rerun()
+
+            if next_button.button("Confirm and Go Next", key=f"confirm_next_{q_index}"):
+                st.session_state[f"manual_next_{q_index}"] = True
+                st.experimental_rerun()
 
         else:
+            # Quiz completed
             responses_col.insert_one({
                 "quiz_id": st.session_state.quiz_id,
                 "username": st.session_state["username"],
@@ -169,12 +168,13 @@ def student_dashboard():
                 "responses": []
             })
             st.success(f"Quiz completed! Your score: {st.session_state.score}")
+
             leaderboard = get_leaderboard(st.session_state.quiz_id)
             st.subheader("Leaderboard:")
             for rank, record in enumerate(leaderboard, 1):
                 st.write(f"{rank}. {record['username']} - {record['score']}")
+
             st.session_state.quiz_started = False
-            st.session_state.go_to_next = False
 
 
 # ------------------ CONDUCTOR DASHBOARD ------------------
