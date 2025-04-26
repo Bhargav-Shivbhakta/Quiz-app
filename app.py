@@ -84,15 +84,16 @@ def student_dashboard():
 
     quiz_list = quizzes_col.distinct("quiz_id")
 
-    # ✅ Keep previously selected quiz safely
+    # Keep previously selected quiz
     selected_quiz = st.selectbox(
         "Select a Quiz",
         quiz_list,
         index=quiz_list.index(st.session_state.get("selected_quiz_name", quiz_list[0])) if "selected_quiz_name" in st.session_state else 0
     )
 
-    if st.session_state.get("go_to_next"):
-        del st.session_state["go_to_next"]
+    # Soft rerun after move
+    if st.session_state.get("move_to_next"):
+        del st.session_state["move_to_next"]
         st.experimental_rerun()
 
     if st.session_state.get("start_quiz_now"):
@@ -102,13 +103,12 @@ def student_dashboard():
     if "quiz_started" not in st.session_state:
         st.session_state.quiz_started = False
 
-    # ✅ Save selected quiz properly before starting
     if selected_quiz and not st.session_state.quiz_started:
         if st.button("Start Quiz"):
             questions = list(quizzes_col.find({"quiz_id": selected_quiz}))
             st.session_state.quiz_data = questions
             st.session_state.quiz_id = selected_quiz
-            st.session_state.selected_quiz_name = selected_quiz  # 🔥 Save the selected quiz name
+            st.session_state.selected_quiz_name = selected_quiz
             st.session_state.current_q = 0
             st.session_state.score = 0
             st.session_state.timer_expired = False
@@ -139,13 +139,17 @@ def student_dashboard():
 
             if remaining > 0:
                 timer_text.markdown(f"⏳ Time Remaining: **{remaining}** seconds")
+                time.sleep(1)  # ✅ Wait 1 second
+                st.experimental_rerun()  # ✅ Soft rerun for live countdown
             else:
                 timer_text.markdown("⏱ Time's up!")
                 st.session_state.timer_expired = True
+                st.session_state.move_to_next = True
+                st.stop()
 
             next_clicked = next_button.button("Next", key=f"next_{q_index}")
 
-            if st.session_state.timer_expired or next_clicked:
+            if next_clicked:
                 is_correct = False
                 if selected_option:
                     is_correct = q["correct_option"] == q["options"].index(selected_option)
@@ -154,7 +158,7 @@ def student_dashboard():
 
                 st.session_state.timer_expired = False
                 st.session_state.current_q += 1
-                st.session_state.go_to_next = True
+                st.session_state.move_to_next = True
                 st.stop()
 
         else:
