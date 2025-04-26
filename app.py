@@ -78,9 +78,18 @@ def admin_reset_data():
 
 # ------------------ STUDENT DASHBOARD ------------------
 def student_dashboard():
+    import time
+
     st.subheader(f"Welcome, {st.session_state['username']} (Student)")
+
     quiz_list = quizzes_col.distinct("quiz_id")
-    selected_quiz = st.selectbox("Select a Quiz", quiz_list)
+
+    # ✅ Keep previously selected quiz safely
+    selected_quiz = st.selectbox(
+        "Select a Quiz",
+        quiz_list,
+        index=quiz_list.index(st.session_state.get("selected_quiz_name", quiz_list[0])) if "selected_quiz_name" in st.session_state else 0
+    )
 
     if st.session_state.get("go_to_next"):
         del st.session_state["go_to_next"]
@@ -93,17 +102,19 @@ def student_dashboard():
     if "quiz_started" not in st.session_state:
         st.session_state.quiz_started = False
 
+    # ✅ Save selected quiz properly before starting
     if selected_quiz and not st.session_state.quiz_started:
         if st.button("Start Quiz"):
             questions = list(quizzes_col.find({"quiz_id": selected_quiz}))
             st.session_state.quiz_data = questions
             st.session_state.quiz_id = selected_quiz
+            st.session_state.selected_quiz_name = selected_quiz  # 🔥 Save the selected quiz name
             st.session_state.current_q = 0
             st.session_state.score = 0
             st.session_state.timer_expired = False
             st.session_state.quiz_started = True
             st.session_state.start_quiz_now = True
-            st.stop()
+            st.experimental_rerun()
 
     if st.session_state.quiz_started:
         questions = st.session_state.quiz_data
@@ -117,6 +128,7 @@ def student_dashboard():
             next_button = st.empty()
             timer_text = st.empty()
 
+            # Timer Management
             timer_key = f"timer_{q_index}"
             start_key = f"start_time_{q_index}"
             if start_key not in st.session_state:
@@ -144,6 +156,7 @@ def student_dashboard():
                 st.session_state.current_q += 1
                 st.session_state.go_to_next = True
                 st.stop()
+
         else:
             responses_col.insert_one({
                 "quiz_id": st.session_state.quiz_id,
@@ -158,6 +171,7 @@ def student_dashboard():
                 st.write(f"{rank}. {record['username']} - {record['score']}")
             st.session_state.quiz_started = False
             st.session_state.go_to_next = False
+
 
 # ------------------ CONDUCTOR DASHBOARD ------------------
 def conductor_dashboard():
