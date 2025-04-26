@@ -1,8 +1,8 @@
-
 import streamlit as st
 from db import users_col, quizzes_col, responses_col
 import pandas as pd
 import hashlib
+import time
 
 # ------------------ UTILS ------------------
 def hash_password(password):
@@ -37,7 +37,6 @@ def login():
     st.subheader("Login")
     username = st.text_input("Username")
     password = st.text_input("Password", type="password")
-
     if st.button("Login"):
         user = users_col.find_one({
             "username": username,
@@ -56,7 +55,6 @@ def reset_password():
     st.subheader("Reset Password")
     username = st.text_input("Enter your username")
     new_password = st.text_input("Enter new password", type="password")
-
     if st.button("Update Password"):
         user = users_col.find_one({"username": username})
         if user:
@@ -68,28 +66,29 @@ def reset_password():
         else:
             st.error("User not found.")
 
+def admin_reset_data():
+    st.subheader("🚨 Admin: Delete All Data")
+    st.warning("⚠️ This will delete ALL users, quizzes, and responses.")
+    confirm = st.checkbox("Yes, I want to delete everything permanently.")
+    if confirm and st.button("Delete All"):
+        users_col.delete_many({})
+        quizzes_col.delete_many({})
+        responses_col.delete_many({})
+        st.success("✅ All data deleted successfully.")
+
 # ------------------ STUDENT DASHBOARD ------------------
-
-
-
-
-
 def student_dashboard():
-    import time
-
     st.subheader(f"Welcome, {st.session_state['username']} (Student)")
     quiz_list = quizzes_col.distinct("quiz_id")
     selected_quiz = st.selectbox("Select a Quiz", quiz_list)
 
     if st.session_state.get("go_to_next"):
         del st.session_state["go_to_next"]
-        st.markdown('<meta http-equiv="refresh" content="0">', unsafe_allow_html=True)
-        st.stop()
+        st.experimental_rerun()
 
     if st.session_state.get("start_quiz_now"):
         del st.session_state["start_quiz_now"]
-        st.markdown('<meta http-equiv="refresh" content="0">', unsafe_allow_html=True)
-        st.stop()
+        st.experimental_rerun()
 
     if "quiz_started" not in st.session_state:
         st.session_state.quiz_started = False
@@ -118,7 +117,6 @@ def student_dashboard():
             next_button = st.empty()
             timer_text = st.empty()
 
-            # Decoupled timer logic
             timer_key = f"timer_{q_index}"
             start_key = f"start_time_{q_index}"
             if start_key not in st.session_state:
@@ -160,6 +158,8 @@ def student_dashboard():
                 st.write(f"{rank}. {record['username']} - {record['score']}")
             st.session_state.quiz_started = False
             st.session_state.go_to_next = False
+
+# ------------------ CONDUCTOR DASHBOARD ------------------
 def conductor_dashboard():
     st.subheader(f"Welcome, {st.session_state['username']} (Conductor)")
     st.write("### Upload Quiz Questions")
@@ -187,19 +187,6 @@ def conductor_dashboard():
                 })
             st.success(f"{num_qs} questions uploaded successfully with {time_limit} sec/question.")
 
-    
-    st.write("---")
-    st.write("🗑️ **Delete a Quiz**")
-
-    quiz_list = quizzes_col.distinct("quiz_id", {"created_by": st.session_state["username"]})
-    delete_quiz_id = st.selectbox("Select Quiz to Delete", quiz_list, key="delete_quiz")
-
-    if st.button("Delete This Quiz"):
-        quizzes_col.delete_many({"quiz_id": delete_quiz_id})
-        responses_col.delete_many({"quiz_id": delete_quiz_id})
-        st.success(f"✅ Quiz '{delete_quiz_id}' and all associated responses deleted.")
-
-    admin_reset_data()
     st.write("### View Leaderboard")
     quiz_list = quizzes_col.distinct("quiz_id", {"created_by": st.session_state["username"]})
     selected_quiz = st.selectbox("Select Quiz to View Leaderboard", quiz_list)
@@ -209,16 +196,17 @@ def conductor_dashboard():
         for rank, record in enumerate(leaderboard, 1):
             st.write(f"{rank}. {record['username']} - {record['score']}")
 
-def admin_reset_data():
-    st.warning("⚠️ This will delete ALL users, quizzes, and responses from the system.")
-    confirm = st.checkbox("Yes, I want to delete everything permanently.")
-    if confirm and st.button("Delete All Data"):
-        users_col.delete_many({})
-        quizzes_col.delete_many({})
-        responses_col.delete_many({})
-        st.success("✅ All data wiped. The system is now fresh.")
+    st.write("---")
+    st.write("🗑️ **Delete a Quiz**")
+    delete_quiz_id = st.selectbox("Select Quiz to Delete", quiz_list, key="delete_quiz")
+    if st.button("Delete This Quiz"):
+        quizzes_col.delete_many({"quiz_id": delete_quiz_id})
+        responses_col.delete_many({"quiz_id": delete_quiz_id})
+        st.success(f"✅ Quiz '{delete_quiz_id}' and all associated responses deleted.")
 
+    admin_reset_data()
 
+# ------------------ MAIN APP ------------------
 def main():
     st.set_page_config(page_title="Quiz App", layout="centered")
     st.title("🧠 Quiz App")
